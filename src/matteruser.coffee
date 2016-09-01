@@ -109,13 +109,13 @@ class Matteruser extends Adapter
                 # If it's not, continue as normal
                 unless user
                     @client.postMessage(str, envelope.room)
-                    return
+                    continue
         
                 # If it is, we assume they want to DM that user
                 # Message their DM channel ID if it already exists.
                 if user.mm?.dm_channel_id?
                     @client.postMessage(str, user.mm.dm_channel_id)
-                    return
+                    continue
         
                 # Otherwise, create a new DM channel ID and message it.
                 @client.getUserDirectMessageChannel user.id, (channel) =>

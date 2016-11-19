@@ -21,7 +21,6 @@ class Matteruser extends Adapter
         mmPassword = process.env.MATTERMOST_PASSWORD
         mmGroup = process.env.MATTERMOST_GROUP
         mmWSSPort = process.env.MATTERMOST_WSS_PORT or '443'
-        mmHTTPPort = process.env.MATTERMOST_HTTP_PORT or null
 
         unless mmHost?
             @robot.logger.emergency "MATTERMOST_HOST is required"
@@ -36,7 +35,7 @@ class Matteruser extends Adapter
             @robot.logger.emergency "MATTERMOST_GROUP is required"
             process.exit 1
 
-        @client = new MatterMostClient mmHost, mmGroup, mmUser, mmPassword, {wssPort: mmWSSPort, httpPort: mmHTTPPort, pingInterval: 30000}
+        @client = new MatterMostClient mmHost, mmGroup, mmUser, mmPassword, {wssPort: mmWSSPort, pingInterval: 30000}
 
         @client.on 'open', @.open
         @client.on 'loggedIn', @.loggedIn
@@ -106,20 +105,18 @@ class Matteruser extends Adapter
             for str in chunkString(str1, 4000)
                 # Check if the target room is also a user's username
                 user = @robot.brain.userForName(envelope.room)
-
+        
                 # If it's not, continue as normal
                 unless user
-                    channel = @client.findChannelByName(envelope.room)
-                    # @client.postMessage(str, envelope.room)
-                    @client.postMessage(str, channel?.id or envelope.room)
+                    @client.postMessage(str, envelope.room)
                     continue
-
+        
                 # If it is, we assume they want to DM that user
                 # Message their DM channel ID if it already exists.
                 if user.mm?.dm_channel_id?
                     @client.postMessage(str, user.mm.dm_channel_id)
                     continue
-
+        
                 # Otherwise, create a new DM channel ID and message it.
                 @client.getUserDirectMessageChannel user.id, (channel) =>
                     user.mm.dm_channel_id = channel.id
@@ -132,22 +129,23 @@ class Matteruser extends Adapter
 
     message: (msg) =>
         @robot.logger.debug msg
-        mmPost = JSON.parse msg.data.post
-        mmUser = @client.getUserByID mmPost.user_id
-        return if mmPost.user_id == @self.id # Ignore our own output
-        @robot.logger.debug 'From: ' + mmPost.user_id + ', To: ' + @self.id
+        return if msg.user_id == @self.id # Ignore our own output
+        @robot.logger.debug 'From: ' + msg.user_id + ', To: ' + @self.id
 
-        user = @robot.brain.userForId mmPost.user_id
-        user.room = mmPost.channel_id
+        mmChannel = @client.getChannelByID msg.channel_id if msg.channel_id
+        mmUser = @client.getUserByID msg.user_id
+        mmPost = JSON.parse msg.data.post
+
+        @robot.logger.debug 'Received message from '+mmUser.username+': ' + mmPost.message
+        user = @robot.brain.userForId msg.user_id
+        user.room = msg.channel_id
 
         text = mmPost.message
-        if msg.data.channel_type == 'D'
-          if !///^@?#{@robot.name} ///i.test(text) # Direct message
-            text = "#{@robot.name} #{text}"
-          user.mm.dm_channel_id = mmPost.channel_id
-        @robot.logger.debug 'Text: ' + text
+        if msg.data.channel_type == 'D' and !///^#{@robot.name} ///i.test(text) # Direct message
+          text = "#{@robot.name} #{text}"
+          user.mm.dm_channel_id = msg.channel_id
 
-        @receive new TextMessage user, text, mmPost.id
+        @receive new TextMessage user, text, msg.id
         @robot.logger.debug "Message sent to hubot brain."
         return true
 
@@ -186,16 +184,6 @@ class Matteruser extends Adapter
             msg.as_user = true
 
         @client.customMessage(msg, msg.channel_id)
-
-    changeHeader: (channel, header) ->
-        return unless channel?
-        return unless header?
-
-        channelInfo = @client.findChannelByName(channel)
-
-        return @robot.logger.error "Channel not found" unless channelInfo?
-
-        @client.setChannelHeader(channelInfo.id, header)
 
 exports.use = (robot) ->
     new Matteruser robot

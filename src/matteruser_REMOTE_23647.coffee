@@ -2,17 +2,6 @@
 
 MatterMostClient = require 'mattermost-client'
 
-chunkString = (str, len) ->
-  _size = Math.ceil(str.length / len)
-  _ret = new Array(_size)
-  _offset = undefined
-  _i = 0
-  while _i < _size
-    _offset = _i * len
-    _ret[_i] = str.substring(_offset, _offset + len)
-    _i++
-  _ret
-
 class Matteruser extends Adapter
 
     run: ->
@@ -87,7 +76,7 @@ class Matteruser extends Adapter
     loggedIn: (user) =>
         @robot.logger.info 'Logged in as user "'+user.username+'" but not connected yet.'
         @self = user
-        @robot.name = process.env.HUBOT_NAME || "hubot"
+        @robot.name = @self.username
         return true
 
     profilesLoaded: =>
@@ -102,28 +91,25 @@ class Matteruser extends Adapter
         return true
 
     send: (envelope, strings...) ->
-        for str1 in strings
-            for str in chunkString(str1, 4000)
-                # Check if the target room is also a user's username
-                user = @robot.brain.userForName(envelope.room)
+        # Check if the target room is also a user's username
+        user = @robot.brain.userForName(envelope.room)
 
-                # If it's not, continue as normal
-                unless user
-                    channel = @client.findChannelByName(envelope.room)
-                    # @client.postMessage(str, envelope.room)
-                    @client.postMessage(str, channel?.id or envelope.room)
-                    continue
+        # If it's not, continue as normal
+        unless user
+            channel = @client.findChannelByName(envelope.room)
+            @client.postMessage(str, channel?.id or envelope.room) for str in strings
+            return
 
-                # If it is, we assume they want to DM that user
-                # Message their DM channel ID if it already exists.
-                if user.mm?.dm_channel_id?
-                    @client.postMessage(str, user.mm.dm_channel_id)
-                    continue
+        # If it is, we assume they want to DM that user
+        # Message their DM channel ID if it already exists.
+        if user.mm?.dm_channel_id?
+            @client.postMessage(str, user.mm.dm_channel_id) for str in strings
+            return
 
-                # Otherwise, create a new DM channel ID and message it.
-                @client.getUserDirectMessageChannel user.id, (channel) =>
-                    user.mm.dm_channel_id = channel.id
-                    @client.postMessage(str, channel.id)
+        # Otherwise, create a new DM channel ID and message it.
+        @client.getUserDirectMessageChannel user.id, (channel) =>
+            user.mm.dm_channel_id = channel.id
+            @client.postMessage(str, channel.id) for str in strings
 
     reply: (envelope, strings...) ->
         @robot.logger.debug "Reply"

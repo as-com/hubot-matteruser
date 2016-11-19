@@ -102,28 +102,48 @@ class Matteruser extends Adapter
         return true
 
     send: (envelope, strings...) ->
+<<<<<<< HEAD
         for str1 in strings
             for str in chunkString(str1, 4000)
                 # Check if the target room is also a user's username
                 user = @robot.brain.userForName(envelope.room)
-
+        
                 # If it's not, continue as normal
                 unless user
-                    channel = @client.findChannelByName(envelope.room)
-                    # @client.postMessage(str, envelope.room)
-                    @client.postMessage(str, channel?.id or envelope.room)
+                    @client.postMessage(str, envelope.room)
                     continue
-
+        
                 # If it is, we assume they want to DM that user
                 # Message their DM channel ID if it already exists.
                 if user.mm?.dm_channel_id?
                     @client.postMessage(str, user.mm.dm_channel_id)
                     continue
-
+        
                 # Otherwise, create a new DM channel ID and message it.
                 @client.getUserDirectMessageChannel user.id, (channel) =>
                     user.mm.dm_channel_id = channel.id
                     @client.postMessage(str, channel.id)
+=======
+        # Check if the target room is also a user's username
+        user = @robot.brain.userForName(envelope.room)
+
+        # If it's not, continue as normal
+        unless user
+            channel = @client.findChannelByName(envelope.room)
+            @client.postMessage(str, channel?.id or envelope.room) for str in strings
+            return
+
+        # If it is, we assume they want to DM that user
+        # Message their DM channel ID if it already exists.
+        if user.mm?.dm_channel_id?
+            @client.postMessage(str, user.mm.dm_channel_id) for str in strings
+            return
+
+        # Otherwise, create a new DM channel ID and message it.
+        @client.getUserDirectMessageChannel user.id, (channel) =>
+            user.mm.dm_channel_id = channel.id
+            @client.postMessage(str, channel.id) for str in strings
+>>>>>>> upstream/master
 
     reply: (envelope, strings...) ->
         @robot.logger.debug "Reply"
